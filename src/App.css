@@ -1,0 +1,147 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg:       #0d1117;
+  --color-surface:  #161b22;
+  --color-elevated: #21262d;
+  --color-border:   #30363d;
+  --color-brand:    #58a6ff;
+  --color-brand-hi: #79c0ff;
+  --color-ok:       #3fb950;
+  --color-warn:     #d29922;
+  --color-danger:   #f85149;
+  --color-ink:      #e6edf3;
+  --color-muted:    #7d8590;
+  --color-faint:    #484f58;
+  --font-mono:      "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+/* ── light theme ─────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --color-bg:       #ffffff;
+  --color-surface:  #f6f8fa;
+  --color-elevated: #eaeef2;
+  --color-border:   #d0d7de;
+  --color-brand:    #0969da;
+  --color-brand-hi: #0550ae;
+  --color-ok:       #1a7f37;
+  --color-warn:     #9a6700;
+  --color-danger:   #cf222e;
+  --color-ink:      #1f2328;
+  --color-muted:    #57606a;
+  --color-faint:    #8c959f;
+}
+
+[data-theme="light"] .terminal {
+  background: #f6f8fa;
+  border-color: var(--color-border);
+}
+
+/* base */
+body {
+  @apply bg-bg text-ink text-sm antialiased select-none;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+/* ── buttons ─────────────────────────────────────────────────── */
+.btn {
+  @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+         border transition-all duration-150 cursor-pointer;
+  font-family: inherit;
+}
+.btn:disabled { @apply opacity-40 cursor-not-allowed; }
+
+.btn-primary  { @apply bg-brand text-black border-brand hover:bg-brand-hi hover:border-brand-hi; }
+.btn-secondary{ @apply bg-elevated text-ink border-border hover:bg-[#2d333b] hover:border-muted; }
+.btn-ghost    { @apply bg-transparent text-muted border-transparent hover:text-ink hover:bg-elevated; }
+.btn-lg       { @apply px-6 py-3 text-base; }
+
+/* ── cards ───────────────────────────────────────────────────── */
+.card { @apply bg-surface border border-border rounded-xl p-5; }
+
+.card-pick {
+  @apply bg-surface border border-border rounded-xl p-5
+         cursor-pointer transition-all duration-150
+         hover:border-brand hover:bg-elevated
+         text-left w-full;
+  font-family: inherit;
+}
+.card-pick.selected { @apply border-brand bg-brand/10; }
+
+/* ── badges ──────────────────────────────────────────────────── */
+.badge {
+  @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+}
+.badge-ok   { @apply bg-ok/10 text-ok; }
+.badge-warn { @apply bg-warn/10 text-warn; }
+.badge-bad  { @apply bg-danger/10 text-danger; }
+.badge-info { @apply bg-brand/10 text-brand; }
+
+/* ── form ────────────────────────────────────────────────────── */
+.input {
+  @apply w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-ink
+         outline-none transition-colors placeholder:text-faint
+         focus:border-brand;
+  font-family: inherit;
+}
+.label { @apply block text-xs font-medium text-muted mb-1.5; }
+.form-group { @apply mb-5; }
+
+/* ── toggle ──────────────────────────────────────────────────── */
+.toggle {
+  @apply flex items-center gap-2.5 cursor-pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+}
+.toggle-track {
+  @apply relative w-9 h-5 rounded-full bg-elevated border border-border
+         transition-all duration-200;
+}
+.toggle-track::after {
+  content: '';
+  @apply absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-faint transition-all duration-200;
+}
+.toggle.on .toggle-track  { @apply bg-brand border-brand; }
+.toggle.on .toggle-track::after { @apply left-[18px] bg-black; }
+
+/* ── wizard step bar ─────────────────────────────────────────── */
+.step-node   { @apply flex items-center gap-2.5; }
+.step-circle {
+  @apply w-7 h-7 rounded-full border-2 border-border flex items-center justify-center
+         text-xs font-semibold text-faint bg-bg transition-all duration-200 shrink-0;
+}
+.step-node.active .step-circle { @apply border-brand text-brand bg-brand/10; }
+.step-node.done   .step-circle { @apply border-ok bg-ok text-black; }
+.step-label  { @apply text-[13px] font-medium text-faint whitespace-nowrap; }
+.step-node.active .step-label { @apply text-ink; }
+.step-node.done   .step-label { @apply text-muted; }
+.step-line   { @apply flex-1 h-px bg-border mx-3 transition-colors duration-300; }
+.step-line.done { @apply bg-ok; }
+
+/* ── terminal ────────────────────────────────────────────────── */
+.terminal {
+  @apply bg-[#010409] border border-border rounded-lg p-4 overflow-y-auto max-h-64;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.t-line       { @apply text-ok; }
+.t-line.error { @apply text-danger; }
+.t-line.hi    { @apply text-brand; }
+.t-cursor {
+  @apply inline-block w-2 h-[13px] bg-brand align-middle;
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+/* ── progress ────────────────────────────────────────────────── */
+.progress-bar  { @apply h-1 bg-elevated rounded-full overflow-hidden; }
+.progress-fill { @apply h-full bg-brand rounded-full transition-all duration-500; }
+
+/* ── scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { @apply bg-border rounded; }
+::-webkit-scrollbar-thumb:hover { @apply bg-faint; }
