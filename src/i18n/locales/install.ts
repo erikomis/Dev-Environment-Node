@@ -1,0 +1,53 @@
+export const ptBr = {
+  titleDone: "Projeto Criado!",
+  titleDefault: "Criar Projeto",
+  subtitles: {
+    idle: "Revise o resumo e clique em Criar.",
+    running: "Aguarde enquanto o projeto é configurado…",
+    done: "Seu projeto está pronto para uso.",
+    error: "Ocorreu um erro durante a criação.",
+  },
+  summaryLabels: {
+    projectName: "Projeto",
+    framework: "Framework",
+    typescript: "TypeScript",
+    packageManager: "Package Manager",
+    database: "Banco",
+    docker: "Docker",
+    docker_tool: "Ferramenta Docker",
+  },
+  destination: "Destino",
+  dbNone: "Nenhum",
+  dockerDesktop: "Docker Desktop",
+  progress: "Progresso",
+  createBtn: "Criar Projeto",
+  retryBtn: "↺ Tentar novamente",
+  doneBtn: "Concluir",
+};
+
+export const en: typeof ptBr = {
+  titleDone: "Project Created!",
+  titleDefault: "Create Project",
+  subtitles: {
+    idle: "Review the summary and click Create.",
+    running: "Please wait while the project is being set up…",
+    done: "Your project is ready to use.",
+    error: "An error occurred during creation.",
+  },
+  summaryLabels: {
+    projectName: "Project",
+    framework: "Framework",
+    typescript: "TypeScript",
+    packageManager: "Package Manager",
+    database: "Database",
+    docker: "Docker",
+    docker_tool: "Docker Tool",
+  },
+  destination: "Destination",
+  dbNone: "None",
+  dockerDesktop: "Docker Desktop",
+  progress: "Progress",
+  createBtn: "Create Project",
+  retryBtn: "↺ Try again",
+  doneBtn: "Finish",
+};
