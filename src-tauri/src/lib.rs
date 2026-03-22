@@ -1041,9 +1041,9 @@ fn check_docker_prerequisites(tool: String) -> DockerPrereqStatus {
 /// Não remove nada automaticamente — a decisão é do usuário.
 fn warn_conflicting_docker_packages(logs: &mut Vec<String>) {
     let conflicting = [
-        ("dpkg",   "-l",  "docker.io"),
-        ("dpkg",   "-l",  "podman-docker"),
-        ("dpkg",   "-l",  "containerd"),
+        ("dpkg",   "-s",  "docker.io"),
+        ("dpkg",   "-s",  "podman-docker"),
+        ("dpkg",   "-s",  "containerd"),
         ("rpm",    "-q",  "docker"),
         ("rpm",    "-q",  "podman-docker"),
         ("pacman", "-Qi", "docker"),
@@ -1071,41 +1071,68 @@ fn warn_conflicting_docker_packages(logs: &mut Vec<String>) {
     }
 }
 
+fn is_root() -> bool {
+    Command::new("id").arg("-u")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| s.trim().parse::<u32>().ok())
+        .map(|uid| uid == 0)
+        .unwrap_or(false)
+}
+
 /// Inicia e habilita o daemon do Docker + adiciona usuário ao grupo docker (via sudo).
 fn post_install_docker_linux(logs: &mut Vec<String>) {
-    if !command_exists("sudo") {
-        logs.push("⚠ sudo não encontrado. Execute manualmente: systemctl start docker && systemctl enable docker".to_string());
+    let root = is_root();
+
+    if !root && !command_exists("sudo") {
+        logs.push("⚠ sudo não encontrado e não é root. Execute manualmente: systemctl start docker && systemctl enable docker".to_string());
         return;
     }
 
     // Inicia e habilita o serviço
     if command_exists("systemctl") {
-        let start_ok = Command::new("sudo")
-            .args(["systemctl", "start", "docker"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
+        let mut cmd = if root {
+            let mut c = Command::new("systemctl");
+            c.args(["start", "docker"]);
+            c
+        } else {
+            let mut c = Command::new("sudo");
+            c.args(["systemctl", "start", "docker"]);
+            c
+        };
+        let start_ok = cmd.output().map(|o| o.status.success()).unwrap_or(false);
 
         if start_ok {
             logs.push("✅ Serviço Docker iniciado.".to_string());
-            let _ = Command::new("sudo").args(["systemctl", "enable", "docker"]).output();
+            let enable_args: &[&str] = if root {
+                &["systemctl", "enable", "docker"]
+            } else {
+                &["sudo", "systemctl", "enable", "docker"]
+            };
+            let _ = Command::new(enable_args[0]).args(&enable_args[1..]).output();
             logs.push("✅ Docker habilitado para iniciar com o sistema.".to_string());
         } else {
             logs.push("⚠ Não foi possível iniciar o serviço Docker. Execute: sudo systemctl start docker".to_string());
         }
     }
 
-    // Adiciona usuário atual ao grupo docker
+    // Adiciona usuário atual ao grupo docker (só faz sentido se não for root)
     let user = std::env::var("USER")
         .or_else(|_| std::env::var("LOGNAME"))
         .unwrap_or_default();
 
     if !user.is_empty() && user != "root" {
-        let ok = Command::new("sudo")
-            .args(["usermod", "-aG", "docker", &user])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
+        let ok = if root {
+            Command::new("usermod").args(["-aG", "docker", &user])
+        } else {
+            let mut c = Command::new("sudo");
+            c.args(["usermod", "-aG", "docker", &user]);
+            c
+        }
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
 
         if ok {
             logs.push(format!("✅ Usuário '{}' adicionado ao grupo docker.", user));
@@ -1121,10 +1148,13 @@ fn post_install_docker_linux(logs: &mut Vec<String>) {
 
 /// Instala Docker Engine no Linux usando o script oficial ou gerenciadores de pacotes.
 fn install_docker_linux(logs: &mut Vec<String>) -> Result<(), String> {
+    let root = is_root();
+
     // 1. Avisa sobre pacotes conflitantes (sem remover nada)
     warn_conflicting_docker_packages(logs);
 
     // 2. Script oficial — funciona em Debian, Ubuntu, Fedora, CentOS, Raspbian
+    //    O script usa sudo internamente quando necessário.
     if command_exists("curl") {
         logs.push("→ Baixando script oficial de instalação do Docker…".to_string());
         let out = Command::new("sh")
@@ -1141,20 +1171,43 @@ fn install_docker_linux(logs: &mut Vec<String>) -> Result<(), String> {
         logs.push(format!("  ↳ Script oficial falhou: {}", stderr));
     }
 
-    // 3. Tentativa por gerenciador de pacotes
+    // 3. Fallback por gerenciador de pacotes (com sudo se não for root)
+    //    apt-get usa docker.io (disponível nos repos padrão do Debian/Ubuntu)
+    //    sem precisar adicionar o repositório oficial do Docker.
     #[rustfmt::skip]
     let attempts: &[(&str, &[&str], &str)] = &[
-        ("apt-get", &["install", "-y"], "docker-ce"),
-        ("dnf",     &["install", "-y"], "docker-ce"),
+        ("apt-get", &["install", "-y"], "docker.io"),
+        ("dnf",     &["install", "-y"], "moby-engine"),
         ("pacman",  &["-S", "--noconfirm"], "docker"),
         ("zypper",  &["install", "-y"], "docker"),
         ("apk",     &["add", "--no-cache"], "docker"),
         ("emerge",  &["-av", "--nospinner"], "app-containers/docker"),
     ];
 
-    if linux_pkg_install(attempts, logs) {
-        post_install_docker_linux(logs);
-        return Ok(());
+    for (pm, args, pkg) in attempts {
+        if !command_exists(pm) { continue; }
+        logs.push(format!("→ Tentando {} {}…", pm, pkg));
+        let ok = if root {
+            Command::new(resolve_cmd(pm))
+                .args(*args).arg(pkg)
+                .env("PATH", build_full_path())
+                .output()
+        } else {
+            Command::new("sudo")
+                .arg(resolve_cmd(pm))
+                .args(*args).arg(pkg)
+                .env("PATH", build_full_path())
+                .output()
+        }
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+        if ok {
+            logs.push(format!("✅ Docker instalado via {}", pm));
+            post_install_docker_linux(logs);
+            return Ok(());
+        }
+        logs.push(format!("  ↳ {} não funcionou, tentando próximo…", pm));
     }
 
     Err("Não foi possível instalar o Docker. Instale manualmente: https://docs.docker.com/engine/install/".to_string())
