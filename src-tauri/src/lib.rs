@@ -1124,13 +1124,10 @@ fn post_install_docker_linux(logs: &mut Vec<String>) {
 
     if !user.is_empty() && user != "root" {
         let ok = if root {
-            Command::new("usermod").args(["-aG", "docker", &user])
+            Command::new("usermod").args(["-aG", "docker", &user]).output()
         } else {
-            let mut c = Command::new("sudo");
-            c.args(["usermod", "-aG", "docker", &user]);
-            c
+            Command::new("sudo").args(["usermod", "-aG", "docker", &user]).output()
         }
-        .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
 
