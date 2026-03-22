@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useI18n } from "../i18n";
-import { useShellAliases, PRESET_ALIASES } from "../viewmodels/useShellAliases";
+import { useShellAliases } from "../viewmodels/useShellAliases";
 import type { ShellAlias } from "../models";
 import TerminalOutput from "../components/TerminalOutput";
 
@@ -8,14 +8,13 @@ interface Props {
   onBack: () => void;
 }
 
-function CategorySection({ title, aliases, presets, hasPreset, onAddPreset, onRemove, addLabel, removeLabel }: Readonly<{
+function CategorySection({ title, aliases, presets, hasPreset, onAddPreset, onRemove, removeLabel }: Readonly<{
   title: string;
   aliases: ShellAlias[];
   presets: ShellAlias[];
   hasPreset: (id: string) => boolean;
   onAddPreset: (p: ShellAlias) => void;
   onRemove: (id: string) => void;
-  addLabel: string;
   removeLabel: string;
 }>) {
   const suggested = presets.filter((p) => !hasPreset(p.id));
@@ -98,7 +97,6 @@ export default function ShellAliases({ onBack }: Readonly<Props>) {
           hasPreset={hasPreset}
           onAddPreset={addPreset}
           onRemove={remove}
-          addLabel={a.presetAdd}
           removeLabel={a.removeBtn}
         />
 
@@ -109,7 +107,6 @@ export default function ShellAliases({ onBack }: Readonly<Props>) {
           hasPreset={hasPreset}
           onAddPreset={addPreset}
           onRemove={remove}
-          addLabel={a.presetAdd}
           removeLabel={a.removeBtn}
         />
 
@@ -120,7 +117,6 @@ export default function ShellAliases({ onBack }: Readonly<Props>) {
           hasPreset={hasPreset}
           onAddPreset={addPreset}
           onRemove={remove}
-          addLabel={a.presetAdd}
           removeLabel={a.removeBtn}
         />
 
