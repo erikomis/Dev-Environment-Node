@@ -13,7 +13,7 @@ function renderWithI18n(ui: React.ReactElement) {
 
 const baseEnv: EnvStatus = {
   node: true, node_via_nvm: true, nvm: true,
-  docker: false, git: true,
+  docker: false, orbstack: false, git: true,
   node_version: "v20.0.0", docker_version: null, git_version: "git version 2.40.0",
   nvm_in_shell: true, git_name: "Dev", git_email: "dev@test.com",
   yarn: false, pnpm: false,
