@@ -1,0 +1,136 @@
+name: Release
+
+# Roda após merge de PR (push direto na main)
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Testes
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache de build Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Instalar dependências de sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Instalar dependências npm
+        run: npm ci
+
+      - name: Testes frontend (vitest)
+        run: npm test
+
+      - name: Testes Rust (cargo test)
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  build:
+    name: Build — ${{ matrix.platform }}
+    needs: test
+    permissions:
+      contents: write   # necessário para criar GitHub Release e fazer upload dos assets
+
+    strategy:
+      fail-fast: false  # se um OS falhar, os outros continuam
+      matrix:
+        include:
+          # ── Linux ───────────────────────────────────────────────────────────
+          - platform: ubuntu-22.04
+            rust-targets: ''
+            tauri-args: ''
+
+          # ── macOS Apple Silicon (M1/M2/M3) ──────────────────────────────────
+          - platform: macos-latest
+            rust-targets: aarch64-apple-darwin
+            tauri-args: '--target aarch64-apple-darwin'
+
+          # ── macOS Intel ──────────────────────────────────────────────────────
+          - platform: macos-13
+            rust-targets: x86_64-apple-darwin
+            tauri-args: '--target x86_64-apple-darwin'
+
+          # ── Windows ──────────────────────────────────────────────────────────
+          - platform: windows-latest
+            rust-targets: ''
+            tauri-args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Node ────────────────────────────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # ── Rust ────────────────────────────────────────────────────────────────
+      - name: Instalar Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Cache de build Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # ── Dependências de sistema (somente Linux) ──────────────────────────────
+      - name: Instalar dependências do sistema
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      # ── Frontend ─────────────────────────────────────────────────────────────
+      - name: Instalar dependências npm
+        run: npm ci
+
+      # ── Build Tauri + GitHub Release ─────────────────────────────────────────
+      # tauri-action lê a versão do src-tauri/tauri.conf.json automaticamente.
+      # Os instaladores gerados são anexados ao release como assets.
+      - name: Build e publicar release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'Dev Environment Node v__VERSION__'
+          releaseBody: |
+            ## Instalação
+
+            | Sistema       | Arquivo                          |
+            |---------------|----------------------------------|
+            | Windows       | `.msi` (recomendado) ou `.exe`   |
+            | macOS (M1/M2) | `.dmg` (aarch64)                 |
+            | macOS (Intel) | `.dmg` (x86_64)                  |
+            | Linux         | `.AppImage` ou `.deb`            |
+
+            > Veja os **Assets** abaixo para baixar.
+          releaseDraft: true      # fica como rascunho até você revisar e publicar
+          prerelease: false
+          args: ${{ matrix.tauri-args }}

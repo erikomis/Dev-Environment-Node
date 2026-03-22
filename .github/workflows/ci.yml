@@ -1,0 +1,82 @@
+name: CI
+
+# Roda em todo PR aberto ou atualizado contra a branch main
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── 1. Checa frontend (TypeScript + build) ─────────────────────────────────
+  frontend:
+    name: Frontend check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Type-check TypeScript
+        run: ./node_modules/.bin/tsc --noEmit
+
+      - name: Build do frontend (Vite)
+        run: npm run build
+
+  # ── 2. Checa backend (Rust) ────────────────────────────────────────────────
+  backend:
+    name: Backend check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar dependências do sistema (Linux/WebKit)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Instalar Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache de build Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: cargo check
+        working-directory: src-tauri
+        run: cargo check
+
+      - name: cargo clippy (sem warnings)
+        working-directory: src-tauri
+        run: cargo clippy -- -D warnings
+
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test
+
+  # ── 3. Testes frontend (Vitest) ────────────────────────────────────────────
+  test-frontend:
+    name: Testes frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Vitest
+        run: npm test
