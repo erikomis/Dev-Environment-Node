@@ -1,0 +1,33 @@
+export const ptBr = {
+  title: "Extras do Projeto",
+  subtitle: "Configurações opcionais para turbinar seu projeto.",
+  vscodeSectionTitle: "Extensões VS Code",
+  vscodeSectionDesc: "Instala extensões recomendadas para o seu stack.",
+  installExtensions: "Instalar extensões",
+  installingExtensions: "Instalando…",
+  extensionsInstalled: "Extensões instaladas!",
+  envSectionTitle: "Variáveis de Ambiente (.env)",
+  envSectionDesc: "Edite as variáveis antes de salvar no projeto.",
+  saveEnv: "Salvar .env",
+  savingEnv: "Salvando…",
+  envSaved: "Arquivo .env atualizado!",
+  skip: "Pular",
+  done: "Concluir",
+};
+
+export const en: typeof ptBr = {
+  title: "Project Extras",
+  subtitle: "Optional settings to power up your project.",
+  vscodeSectionTitle: "VS Code Extensions",
+  vscodeSectionDesc: "Installs recommended extensions for your stack.",
+  installExtensions: "Install extensions",
+  installingExtensions: "Installing…",
+  extensionsInstalled: "Extensions installed!",
+  envSectionTitle: "Environment Variables (.env)",
+  envSectionDesc: "Edit the variables before saving to the project.",
+  saveEnv: "Save .env",
+  savingEnv: "Saving…",
+  envSaved: ".env file updated!",
+  skip: "Skip",
+  done: "Done",
+};

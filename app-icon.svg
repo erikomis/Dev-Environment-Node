@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#161b22"/>
+      <stop offset="100%" stop-color="#0d1117"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#58a6ff" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#3fb950" stop-opacity="0.08"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="200" fill="url(#bg)"/>
+
+  <!-- Subtle inner glow -->
+  <rect width="1024" height="1024" rx="200" fill="url(#glow)"/>
+
+  <!-- Node.js hexagon (pointy-top) — outer ring -->
+  <polygon
+    points="512,128 840,320 840,704 512,896 184,704 184,320"
+    fill="none"
+    stroke="#3fb950"
+    stroke-width="28"
+    stroke-linejoin="round"
+    opacity="0.9"
+  />
+
+  <!-- Node.js hexagon — inner ring (smaller) -->
+  <polygon
+    points="512,200 780,354 780,662 512,816 244,662 244,354"
+    fill="none"
+    stroke="#3fb950"
+    stroke-width="8"
+    stroke-linejoin="round"
+    opacity="0.25"
+  />
+
+  <!-- Terminal chevron ">" — the prompt symbol -->
+  <polyline
+    points="348,356 628,512 348,668"
+    fill="none"
+    stroke="#58a6ff"
+    stroke-width="72"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Cursor underscore -->
+  <rect x="628" y="584" width="88" height="18" rx="9" fill="#58a6ff" opacity="0.85"/>
+
+  <!-- Corner dots for "circuit" feel -->
+  <circle cx="184" cy="320" r="14" fill="#3fb950" opacity="0.6"/>
+  <circle cx="840" cy="320" r="14" fill="#3fb950" opacity="0.6"/>
+  <circle cx="840" cy="704" r="14" fill="#3fb950" opacity="0.6"/>
+  <circle cx="184" cy="704" r="14" fill="#3fb950" opacity="0.6"/>
+  <circle cx="512" cy="128" r="14" fill="#3fb950" opacity="0.6"/>
+  <circle cx="512" cy="896" r="14" fill="#3fb950" opacity="0.6"/>
+</svg>
