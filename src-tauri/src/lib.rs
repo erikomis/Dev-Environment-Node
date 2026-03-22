@@ -14,6 +14,7 @@ pub struct EnvStatus {
     node_via_nvm: bool,
     nvm: bool,
     docker: bool,
+    orbstack: bool,
     git: bool,
     node_version: Option<String>,
     docker_version: Option<String>,
@@ -283,6 +284,7 @@ fn get_version(cmd: &str, args: &[&str]) -> Option<String> {
 fn check_environment() -> EnvStatus {
     let node = command_exists("node");
     let docker = command_exists("docker");
+    let orbstack = command_exists("orb") || std::path::Path::new("/Applications/OrbStack.app").exists();
     let git = command_exists("git");
     let nvm = std::env::var("HOME")
         .map(|h| std::path::Path::new(&h).join(".nvm/nvm.sh").exists())
@@ -306,6 +308,7 @@ fn check_environment() -> EnvStatus {
         node_via_nvm,
         nvm,
         docker,
+        orbstack,
         git,
         node_version: if node { get_version("node", &["--version"]) } else { None },
         docker_version: if docker { get_version("docker", &["--version"]) } else { None },
@@ -815,9 +818,313 @@ fn linux_pkg_install(packages: &[(&str, &[&str], &str)], logs: &mut Vec<String>)
     false
 }
 
+/// Verifica se os pré-requisitos para instalar Docker estão presentes.
+#[derive(Serialize)]
+pub struct DockerPrereqStatus {
+    can_install: bool,
+    reason: Option<String>,
+    warnings: Vec<String>,
+}
+
+#[tauri::command]
+fn check_docker_prerequisites(tool: String) -> DockerPrereqStatus {
+    let mut warnings: Vec<String> = Vec::new();
+
+    match std::env::consts::OS {
+        "macos" => {
+            // 1. Homebrew precisa estar instalado
+            if !command_exists("brew") {
+                return DockerPrereqStatus {
+                    can_install: false,
+                    reason: Some("Homebrew não encontrado. Instale em https://brew.sh antes de continuar.".to_string()),
+                    warnings,
+                };
+            }
+
+            // 2. Versão mínima do macOS
+            let min_major: u32 = if tool == "orbstack" { 13 } else { 12 };
+            let min_name = if tool == "orbstack" { "Ventura (13)" } else { "Monterey (12)" };
+
+            let version_ok = Command::new("sw_vers")
+                .arg("-productVersion")
+                .output()
+                .ok()
+                .and_then(|out| String::from_utf8(out.stdout).ok())
+                .and_then(|v| v.trim().split('.').next()?.parse::<u32>().ok())
+                .map(|major| major >= min_major)
+                .unwrap_or(false);
+
+            if !version_ok {
+                return DockerPrereqStatus {
+                    can_install: false,
+                    reason: Some(format!(
+                        "{} requer macOS {} ou mais recente.",
+                        if tool == "orbstack" { "OrbStack" } else { "Docker Desktop" },
+                        min_name
+                    )),
+                    warnings,
+                };
+            }
+
+            warnings.push("Após a instalação, abra o app manualmente para concluir a configuração.".to_string());
+            DockerPrereqStatus { can_install: true, reason: None, warnings }
+        }
+        "linux" => {
+            // 1. Arquitetura 64-bit
+            let arch = Command::new("uname")
+                .arg("-m")
+                .output()
+                .ok()
+                .and_then(|out| String::from_utf8(out.stdout).ok())
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
+
+            let is_64bit = matches!(arch.as_str(), "x86_64" | "aarch64" | "arm64" | "s390x" | "ppc64le");
+            if !is_64bit {
+                return DockerPrereqStatus {
+                    can_install: false,
+                    reason: Some(format!(
+                        "Arquitetura '{}' não suportada. Docker Engine requer sistema 64-bit (x86_64, aarch64, s390x ou ppc64le).",
+                        arch
+                    )),
+                    warnings,
+                };
+            }
+
+            // 2. curl ou package manager
+            let has_curl = command_exists("curl");
+            let has_pm = ["apt-get", "dnf", "pacman", "zypper", "apk", "emerge"]
+                .iter()
+                .any(|pm| command_exists(pm));
+
+            if !has_curl && !has_pm {
+                return DockerPrereqStatus {
+                    can_install: false,
+                    reason: Some("curl e nenhum gerenciador de pacotes encontrado. Instale curl ou um gerenciador compatível.".to_string()),
+                    warnings,
+                };
+            }
+
+            if !has_curl {
+                warnings.push("curl não encontrado; será usada instalação via gerenciador de pacotes.".to_string());
+            }
+
+            warnings.push("Pode ser necessário executar com sudo.".to_string());
+            DockerPrereqStatus { can_install: true, reason: None, warnings }
+        }
+        "windows" => {
+            // 1. winget
+            if !command_exists("winget") {
+                return DockerPrereqStatus {
+                    can_install: false,
+                    reason: Some("winget não encontrado. Atualize o Windows ou instale o App Installer pela Microsoft Store.".to_string()),
+                    warnings,
+                };
+            }
+
+            // 2. Versão do Windows — mínimo build 19045 (Windows 10 22H2)
+            let build_number: Option<u32> = Command::new("powershell")
+                .args(["-NoProfile", "-Command",
+                    "(Get-WmiObject Win32_OperatingSystem).BuildNumber"])
+                .output()
+                .ok()
+                .and_then(|out| String::from_utf8(out.stdout).ok())
+                .and_then(|s| s.trim().parse().ok());
+
+            match build_number {
+                Some(build) if build < 19045 => {
+                    return DockerPrereqStatus {
+                        can_install: false,
+                        reason: Some(format!(
+                            "Windows build {} detectado. Docker Desktop requer Windows 10 22H2 (build 19045) ou Windows 11 23H2 (build 22631) ou mais recente.",
+                            build
+                        )),
+                        warnings,
+                    };
+                }
+                None => {
+                    warnings.push("Não foi possível verificar a versão do Windows. Certifique-se de usar Windows 10 22H2 ou Windows 11 23H2+.".to_string());
+                }
+                _ => {}
+            }
+
+            // 3. RAM mínima de 8 GB
+            let ram_gb: Option<f64> = Command::new("powershell")
+                .args(["-NoProfile", "-Command",
+                    "(Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory"])
+                .output()
+                .ok()
+                .and_then(|out| String::from_utf8(out.stdout).ok())
+                .and_then(|s| s.trim().parse::<u64>().ok())
+                .map(|bytes| bytes as f64 / 1_073_741_824.0);
+
+            if let Some(gb) = ram_gb {
+                if gb < 8.0 {
+                    return DockerPrereqStatus {
+                        can_install: false,
+                        reason: Some(format!(
+                            "RAM insuficiente: {:.1} GB detectados. Docker Desktop requer no mínimo 8 GB.",
+                            gb
+                        )),
+                        warnings,
+                    };
+                }
+            }
+
+            // 4. Virtualização habilitada no firmware (Intel VT-x / AMD-V + SLAT)
+            let virt_enabled = Command::new("powershell")
+                .args(["-NoProfile", "-Command",
+                    "(Get-WmiObject Win32_Processor).VirtualizationFirmwareEnabled"])
+                .output()
+                .ok()
+                .map(|out| String::from_utf8_lossy(&out.stdout).trim().eq_ignore_ascii_case("True"))
+                .unwrap_or(false);
+
+            if !virt_enabled {
+                return DockerPrereqStatus {
+                    can_install: false,
+                    reason: Some(
+                        "Virtualização não está habilitada no firmware (BIOS/UEFI). \
+                         Habilite a opção Intel VT-x ou AMD-V nas configurações do BIOS para prosseguir."
+                        .to_string()
+                    ),
+                    warnings,
+                };
+            }
+
+            // 5. WSL versão 2.1.5+
+            // `wsl --version` retorna linhas como "WSL version: 2.x.x.x"
+            let wsl_version: Option<(u32, u32, u32)> = Command::new("wsl")
+                .arg("--version")
+                .output()
+                .ok()
+                .and_then(|out| String::from_utf8(out.stdout).ok())
+                .and_then(|s| {
+                    s.lines()
+                        .find(|l| l.to_lowercase().contains("wsl version"))
+                        .and_then(|l| l.split(':').nth(1))
+                        .map(|v| v.trim().to_string())
+                })
+                .and_then(|v| {
+                    let parts: Vec<u32> = v.split('.').filter_map(|p| p.parse().ok()).collect();
+                    if parts.len() >= 3 { Some((parts[0], parts[1], parts[2])) } else { None }
+                });
+
+            match wsl_version {
+                None => {
+                    warnings.push(
+                        "WSL 2 não encontrado ou desatualizado. Execute 'wsl --install' no PowerShell como administrador e reinicie o computador antes de usar o Docker Desktop."
+                        .to_string()
+                    );
+                }
+                Some((major, minor, patch)) if (major, minor, patch) < (2, 1, 5) => {
+                    warnings.push(format!(
+                        "WSL versão {}.{}.{} detectada; Docker Desktop requer WSL 2.1.5+. Execute 'wsl --update' para atualizar.",
+                        major, minor, patch
+                    ));
+                }
+                _ => {}
+            }
+
+            warnings.push("Após a instalação do Docker Desktop, reinicie o computador para finalizar.".to_string());
+            DockerPrereqStatus { can_install: true, reason: None, warnings }
+        }
+        _ => DockerPrereqStatus {
+            can_install: false,
+            reason: Some("Sistema operacional não suportado para instalação automática do Docker.".to_string()),
+            warnings,
+        },
+    }
+}
+
+/// Verifica se há pacotes que conflitam com o Docker Engine oficial e avisa o usuário.
+/// Não remove nada automaticamente — a decisão é do usuário.
+fn warn_conflicting_docker_packages(logs: &mut Vec<String>) {
+    let conflicting = [
+        ("dpkg",   "-l",  "docker.io"),
+        ("dpkg",   "-l",  "podman-docker"),
+        ("dpkg",   "-l",  "containerd"),
+        ("rpm",    "-q",  "docker"),
+        ("rpm",    "-q",  "podman-docker"),
+        ("pacman", "-Qi", "docker"),
+    ];
+
+    let found: Vec<&str> = conflicting.iter()
+        .filter(|(cmd, flag, pkg)| {
+            command_exists(cmd) &&
+            Command::new(cmd)
+                .args([*flag, *pkg])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        })
+        .map(|(_, _, pkg)| *pkg)
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if !found.is_empty() {
+        logs.push(format!(
+            "⚠ Pacotes conflitantes detectados: {}. Se a instalação falhar, remova-os manualmente antes de tentar novamente.",
+            found.join(", ")
+        ));
+    }
+}
+
+/// Inicia e habilita o daemon do Docker + adiciona usuário ao grupo docker (via sudo).
+fn post_install_docker_linux(logs: &mut Vec<String>) {
+    if !command_exists("sudo") {
+        logs.push("⚠ sudo não encontrado. Execute manualmente: systemctl start docker && systemctl enable docker".to_string());
+        return;
+    }
+
+    // Inicia e habilita o serviço
+    if command_exists("systemctl") {
+        let start_ok = Command::new("sudo")
+            .args(["systemctl", "start", "docker"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+
+        if start_ok {
+            logs.push("✅ Serviço Docker iniciado.".to_string());
+            let _ = Command::new("sudo").args(["systemctl", "enable", "docker"]).output();
+            logs.push("✅ Docker habilitado para iniciar com o sistema.".to_string());
+        } else {
+            logs.push("⚠ Não foi possível iniciar o serviço Docker. Execute: sudo systemctl start docker".to_string());
+        }
+    }
+
+    // Adiciona usuário atual ao grupo docker
+    let user = std::env::var("USER")
+        .or_else(|_| std::env::var("LOGNAME"))
+        .unwrap_or_default();
+
+    if !user.is_empty() && user != "root" {
+        let ok = Command::new("sudo")
+            .args(["usermod", "-aG", "docker", &user])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+
+        if ok {
+            logs.push(format!("✅ Usuário '{}' adicionado ao grupo docker.", user));
+            logs.push("⚠ Faça logout e login novamente (ou execute 'newgrp docker') para usar Docker sem sudo.".to_string());
+        } else {
+            logs.push(format!(
+                "⚠ Não foi possível adicionar '{}' ao grupo docker. Execute: sudo usermod -aG docker {}",
+                user, user
+            ));
+        }
+    }
+}
+
 /// Instala Docker Engine no Linux usando o script oficial ou gerenciadores de pacotes.
 fn install_docker_linux(logs: &mut Vec<String>) -> Result<(), String> {
-    // 1. Script oficial — funciona em Debian, Ubuntu, Fedora, CentOS, Raspbian
+    // 1. Avisa sobre pacotes conflitantes (sem remover nada)
+    warn_conflicting_docker_packages(logs);
+
+    // 2. Script oficial — funciona em Debian, Ubuntu, Fedora, CentOS, Raspbian
     if command_exists("curl") {
         logs.push("→ Baixando script oficial de instalação do Docker…".to_string());
         let out = Command::new("sh")
@@ -827,17 +1134,17 @@ fn install_docker_linux(logs: &mut Vec<String>) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         if out.status.success() {
             logs.push("✅ Docker instalado via script oficial.".to_string());
-            logs.push("→ Para usar sem sudo: sudo usermod -aG docker $USER".to_string());
+            post_install_docker_linux(logs);
             return Ok(());
         }
         let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
         logs.push(format!("  ↳ Script oficial falhou: {}", stderr));
     }
 
-    // 2. Tentativa por gerenciador de pacotes
+    // 3. Tentativa por gerenciador de pacotes
     #[rustfmt::skip]
     let attempts: &[(&str, &[&str], &str)] = &[
-        ("apt-get", &["install", "-y"], "docker.io"),
+        ("apt-get", &["install", "-y"], "docker-ce"),
         ("dnf",     &["install", "-y"], "docker-ce"),
         ("pacman",  &["-S", "--noconfirm"], "docker"),
         ("zypper",  &["install", "-y"], "docker"),
@@ -846,7 +1153,7 @@ fn install_docker_linux(logs: &mut Vec<String>) -> Result<(), String> {
     ];
 
     if linux_pkg_install(attempts, logs) {
-        logs.push("→ Para usar sem sudo: sudo usermod -aG docker $USER".to_string());
+        post_install_docker_linux(logs);
         return Ok(());
     }
 
@@ -911,10 +1218,70 @@ fn install_docker_tool(app: tauri::AppHandle, tool: String) -> Result<Vec<String
         }
         "windows" => {
             // OrbStack não existe no Windows — usa Docker Desktop via winget
-            let winget_id = "Docker.DockerDesktop";
+
+            // ── WSL ───────────────────────────────────────────────────────────
+            // Detecta versão do WSL para decidir se instala ou atualiza
+            let wsl_version: Option<(u32, u32, u32)> = Command::new("wsl")
+                .arg("--version")
+                .output()
+                .ok()
+                .and_then(|out| String::from_utf8(out.stdout).ok())
+                .and_then(|s| {
+                    s.lines()
+                        .find(|l| l.to_lowercase().contains("wsl version"))
+                        .and_then(|l| l.split(':').nth(1))
+                        .map(|v| v.trim().to_string())
+                })
+                .and_then(|v| {
+                    let parts: Vec<u32> = v.split('.').filter_map(|p| p.parse().ok()).collect();
+                    if parts.len() >= 3 { Some((parts[0], parts[1], parts[2])) } else { None }
+                });
+
+            match wsl_version {
+                None => {
+                    // WSL não instalado — instala via wsl --install
+                    logs.push("→ WSL 2 não encontrado — instalando…".to_string());
+                    let out = Command::new("wsl")
+                        .args(["--install", "--no-launch"])
+                        .output()
+                        .map_err(|e| e.to_string())?;
+                    if out.status.success() {
+                        logs.push("✅ WSL 2 instalado.".to_string());
+                        logs.push("⚠ Reinicie o computador e execute a instalação novamente para prosseguir com o Docker Desktop.".to_string());
+                        for line in &logs { emit_log(&app, line); }
+                        return Err("reiniciar_necessario".to_string());
+                    } else {
+                        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                        // Falha comum: falta de admin — orienta o usuário
+                        return Err(format!(
+                            "Falha ao instalar WSL 2: {}. Execute o aplicativo como administrador e tente novamente.",
+                            stderr
+                        ));
+                    }
+                }
+                Some((major, minor, patch)) if (major, minor, patch) < (2, 1, 5) => {
+                    // WSL instalado mas desatualizado — atualiza
+                    logs.push(format!("→ WSL {}.{}.{} detectado (mínimo 2.1.5) — atualizando…", major, minor, patch));
+                    let out = Command::new("wsl")
+                        .arg("--update")
+                        .output()
+                        .map_err(|e| e.to_string())?;
+                    if out.status.success() {
+                        logs.push("✅ WSL atualizado.".to_string());
+                    } else {
+                        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                        logs.push(format!("⚠ Falha ao atualizar WSL: {}. Tente 'wsl --update' manualmente.", stderr));
+                    }
+                }
+                Some((major, minor, patch)) => {
+                    logs.push(format!("→ WSL {}.{}.{} detectado — OK.", major, minor, patch));
+                }
+            }
+
+            // ── Docker Desktop ────────────────────────────────────────────────
             logs.push("→ Instalando Docker Desktop via winget…".to_string());
             let out = Command::new(resolve_cmd("winget"))
-                .args(["install", "--id", winget_id, "-e", "--silent"])
+                .args(["install", "--id", "Docker.DockerDesktop", "-e", "--silent", "--accept-package-agreements", "--accept-source-agreements"])
                 .env("PATH", build_full_path())
                 .output()
                 .map_err(|e| e.to_string())?;
@@ -1855,6 +2222,7 @@ pub fn run() {
             run_installer,
             fix_shell_config,
             generate_ssh_key,
+            check_docker_prerequisites,
             install_docker_tool,
             check_terminal,
             setup_terminal,

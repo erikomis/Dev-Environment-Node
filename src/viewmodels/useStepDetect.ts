@@ -34,12 +34,12 @@ function buildTools(env: EnvStatus | null): ToolInfo[] {
       detail: env ? nodeDetail(env) : null,
     },
     {
-      label: "Docker",
-      icon: "🐳",
+      label: env?.orbstack ? "OrbStack" : "Docker",
+      icon: env?.orbstack ? "⚡" : "🐳",
       description: "Containers e ambientes isolados",
       required: false,
-      installed: env?.docker ?? false,
-      detail: env?.docker_version?.split(",")[0] ?? null,
+      installed: (env?.docker ?? false) || (env?.orbstack ?? false),
+      detail: env?.orbstack ? "OrbStack" : (env?.docker_version?.split(",")[0] ?? null),
     },
     {
       label: "Git",
