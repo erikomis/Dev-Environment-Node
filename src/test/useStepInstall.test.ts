@@ -30,6 +30,7 @@ const mockEnv = {
   nvm: true,
   docker: false,
   orbstack: false,
+  docker_version: null,
   git: true,
   git_version: "git version 2.40.0",
   nvm_in_shell: true,
