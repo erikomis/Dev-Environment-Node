@@ -774,20 +774,16 @@ fn run_installer(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     let mut lines: Vec<String> = Vec::new();
 
     if let Some(stdout) = child.stdout.take() {
-        for line in BufReader::new(stdout).lines() {
-            if let Ok(l) = line {
-                emit_log(&app, &l);
-                lines.push(l);
-            }
+        for l in BufReader::new(stdout).lines().map_while(Result::ok) {
+            emit_log(&app, &l);
+            lines.push(l);
         }
     }
     if let Some(stderr) = child.stderr.take() {
-        for line in BufReader::new(stderr).lines() {
-            if let Ok(l) = line {
-                if !l.trim().is_empty() {
-                    emit_log(&app, &l);
-                    lines.push(l);
-                }
+        for l in BufReader::new(stderr).lines().map_while(Result::ok) {
+            if !l.trim().is_empty() {
+                emit_log(&app, &l);
+                lines.push(l);
             }
         }
     }
@@ -887,10 +883,9 @@ fn install_font_linux(font_id: &str, logs: &mut Vec<String>) -> Result<(), Strin
         return Ok(());
     }
 
-    Err(format!(
-        "Não foi possível instalar a fonte automaticamente. \
+    Err("Não foi possível instalar a fonte automaticamente. \
          Baixe manualmente em https://www.nerdfonts.com"
-    ))
+        .to_string())
 }
 
 #[tauri::command]
@@ -917,7 +912,7 @@ fn install_docker_tool(app: tauri::AppHandle, tool: String) -> Result<Vec<String
         "windows" => {
             // OrbStack não existe no Windows — usa Docker Desktop via winget
             let winget_id = "Docker.DockerDesktop";
-            logs.push(format!("→ Instalando Docker Desktop via winget…"));
+            logs.push("→ Instalando Docker Desktop via winget…".to_string());
             let out = Command::new(resolve_cmd("winget"))
                 .args(["install", "--id", winget_id, "-e", "--silent"])
                 .env("PATH", build_full_path())
@@ -962,7 +957,7 @@ fn check_terminal() -> TerminalStatus {
     let current_shell = std::env::var("SHELL").unwrap_or_default();
     let shell_name = current_shell
         .split('/')
-        .last()
+        .next_back()
         .unwrap_or("unknown")
         .to_string();
     let home = std::env::var("HOME").unwrap_or_default();
@@ -1147,24 +1142,22 @@ fn setup_terminal(setup: TerminalSetup) -> Result<Vec<String>, String> {
     }
 
     // ── Ferramentas CLI ───────────────────────────────────────────────────────
-    if setup.install_starship {
-        if install_starship_tool(&mut logs) {
-            // Adiciona init ao shell config
-            use std::io::Write;
-            let shell = std::env::var("SHELL").unwrap_or_default();
-            let (rc_file, init_line) = if shell.contains("fish") {
-                (".config/fish/config.fish", "starship init fish | source")
-            } else if shell.contains("bash") {
-                (".bashrc", "eval \"$(starship init bash)\"")
-            } else {
-                (".zshrc", "eval \"$(starship init zsh)\"")
-            };
-            let rc_path = std::path::Path::new(&home).join(rc_file);
-            let content = std::fs::read_to_string(&rc_path).unwrap_or_default();
-            if !content.contains("starship init") {
-                if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open(&rc_path) {
-                    let _ = f.write_all(format!("\n# Starship prompt\n{}\n", init_line).as_bytes());
-                }
+    if setup.install_starship && install_starship_tool(&mut logs) {
+        // Adiciona init ao shell config
+        use std::io::Write;
+        let shell = std::env::var("SHELL").unwrap_or_default();
+        let (rc_file, init_line) = if shell.contains("fish") {
+            (".config/fish/config.fish", "starship init fish | source")
+        } else if shell.contains("bash") {
+            (".bashrc", "eval \"$(starship init bash)\"")
+        } else {
+            (".zshrc", "eval \"$(starship init zsh)\"")
+        };
+        let rc_path = std::path::Path::new(&home).join(rc_file);
+        let content = std::fs::read_to_string(&rc_path).unwrap_or_default();
+        if !content.contains("starship init") {
+            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).create(true).open(&rc_path) {
+                let _ = f.write_all(format!("\n# Starship prompt\n{}\n", init_line).as_bytes());
             }
         }
     }
@@ -1785,12 +1778,12 @@ async fn run_project_script(
         .map_err(|e| e.to_string())?;
 
     if let Some(stdout) = child.stdout.take() {
-        for line in BufReader::new(stdout).lines().flatten() {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             app.emit("script-log", &line).ok();
         }
     }
     if let Some(stderr) = child.stderr.take() {
-        for line in BufReader::new(stderr).lines().flatten() {
+        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
             if !line.trim().is_empty() {
                 app.emit("script-log", &line).ok();
             }
