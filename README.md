@@ -65,7 +65,10 @@ Ativa o toggle **Monorepo** na etapa Stack para usar **Turborepo** ou **Nx** com
 
 - Bancos: PostgreSQL, MySQL, MongoDB — `.env` e dependências incluídos
 - Docker: `Dockerfile` + `docker-compose.yml` gerados opcionalmente
-- Ferramenta Docker: **Docker Desktop** ou **OrbStack** (macOS)
+- Ferramenta Docker: **Docker Desktop** ou **OrbStack** (macOS) — instalação automática com verificação de pré-requisitos por OS
+  - **macOS**: verifica Homebrew e versão mínima do sistema (12+ para Docker Desktop, 13+ para OrbStack)
+  - **Linux**: verifica arquitetura 64-bit, curl ou package manager, inicia o daemon e adiciona o usuário ao grupo `docker`
+  - **Windows**: verifica build do Windows (19045+), RAM (8 GB+), virtualização no firmware (VT-x/AMD-V) e WSL 2.1.5+ — instala ou atualiza o WSL automaticamente se necessário
 
 ---
 
@@ -178,7 +181,7 @@ dev-env-node/
 
 | Comando | Descrição |
 | --- | --- |
-| `check_environment` | Detecta Node, nvm, Docker, Git, yarn/pnpm, chave SSH e versões |
+| `check_environment` | Detecta Node, nvm, Docker, OrbStack, Git, yarn/pnpm, chave SSH e versões |
 | `get_os` | Retorna o OS atual (`macos`, `linux`, `windows`) |
 | `path_exists` | Verifica se um caminho existe no sistema de arquivos |
 | `fix_shell_config` | Adiciona nvm ao shell, configura Git name/email, instala yarn/pnpm |
@@ -186,7 +189,8 @@ dev-env-node/
 | `create_project` | Cria projeto via CLI ou estrutura manual conforme o framework |
 | `run_installer` | Instala Node.js via nvm no OS detectado |
 | `run_command` | Executa comandos da lista de permissões com PATH completo |
-| `install_docker_tool` | Instala Docker Desktop ou OrbStack |
+| `check_docker_prerequisites` | Verifica pré-requisitos para instalar Docker/OrbStack por OS (versão do SO, RAM, virtualização, WSL, Homebrew) |
+| `install_docker_tool` | Instala Docker Desktop ou OrbStack; no Windows instala/atualiza o WSL automaticamente se necessário |
 | `check_terminal` | Detecta Oh My Zsh e ferramentas CLI instaladas |
 | `setup_terminal` | Instala ferramentas de terminal e configura o shell rc |
 | `check_vscode` | Detecta VSCode, versão, extensões e fontes instaladas |
@@ -229,3 +233,7 @@ meu-projeto/
 - [x] Dashboard de projetos criados
 - [x] Temas (light mode)
 - [x] Internacionalização (en / pt-br)
+- [x] Verificação de pré-requisitos do Docker por OS antes de instalar
+- [x] Instalação/atualização automática do WSL 2 no Windows
+- [x] Detecção de OrbStack além do Docker Desktop
+- [x] Pós-instalação do Docker no Linux (daemon, grupo docker)
