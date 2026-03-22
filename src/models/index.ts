@@ -4,6 +4,7 @@ export interface EnvStatus {
   node_via_nvm: boolean;
   nvm: boolean;
   docker: boolean;
+  orbstack: boolean;
   git: boolean;
   node_version: string | null;
   docker_version: string | null;
