@@ -10,11 +10,11 @@ jobs:
     name: Testes
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Instalar Rust stable
@@ -63,8 +63,8 @@ jobs:
             rust-targets: aarch64-apple-darwin
             tauri-args: '--target aarch64-apple-darwin'
 
-          # ── macOS Intel ──────────────────────────────────────────────────────
-          - platform: macos-13
+          # ── macOS Intel (cross-compilado a partir do runner arm64) ───────────
+          - platform: macos-latest
             rust-targets: x86_64-apple-darwin
             tauri-args: '--target x86_64-apple-darwin'
 
@@ -76,12 +76,12 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # ── Node ────────────────────────────────────────────────────────────────
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       # ── Rust ────────────────────────────────────────────────────────────────
